@@ -8,6 +8,7 @@ if ! [ -e /dev/net/tun ]; then
 fi
 
 CUR_INTERFACE=-1
+GATEWAY_PARAMS=""
 for FILE in vpns/*.ovpn; do
   let CUR_INTERFACE+=1
   let TABLE_NUM=CUR_INTERFACE+1
@@ -18,7 +19,7 @@ for FILE in vpns/*.ovpn; do
   LOOPS=0; until [ $LOOPS -eq 10 ] || ip addr show tun$CUR_INTERFACE 2>1 >/dev/null; do let LOOPS+=1; sleep 1; done
   if ! ip addr show tun$CUR_INTERFACE 2>1 >/dev/null; then echo "*** ABORTING: Failed to bring up openvpn interface"; exit 1; fi
 
-  echo "*** Device tun$CUR_INTERFACE up, setting up routes and squid config"
+  echo "*** Device tun$CUR_INTERFACE up, setting up routes and gateway commandline params"
   IP_START=$(ip -o addr show tun$CUR_INTERFACE | sed -n 's/.*inet \(\d\+\.\d\+\.\d\+\)\..*/\1/p')  # X.X.X
   IP=$(ip -o addr show tun$CUR_INTERFACE | sed -n 's/.*inet \(\d\+\.\d\+\.\d\+\.\d\+\)\/.*/\1/p')  # X.X.X.X
 
@@ -30,14 +31,9 @@ for FILE in vpns/*.ovpn; do
   ip route add default via $IP_START.1 dev tun$CUR_INTERFACE table VPN$PORT
   ip rule add fwmark $PORT table VPN$PORT
   iptables -A OUTPUT -t mangle -s $IP -j MARK --set-mark $PORT
-
-  # create the redirection per-port in squid
-  echo "http_port $PORT name=$PORT" >> /etc/squid/squid.conf
-  echo "acl vpn$PORT myportname $PORT" >> /etc/squid/squid.conf
-  echo "http_access allow vpn$PORT" >> /etc/squid/squid.conf
-  echo "tcp_outgoing_address $IP vpn$PORT" >> /etc/squid/squid.conf
+  GATEWAY_PARAMS="$GATEWAY_PARAMS --server $PORT:$IP"
   set +o xtrace
 done
 
-echo "*** Running squid"
-exec squid -N -d1
+echo "*** Gateway"
+exec node dist/index.js $GATEWAY_PARAMS
