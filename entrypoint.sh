@@ -8,7 +8,6 @@ if ! [ -e /dev/net/tun ]; then
 fi
 
 CUR_INTERFACE=-1
-GATEWAY_PARAMS=""
 for FILE in vpns/*.ovpn; do
   let CUR_INTERFACE+=1
   let TABLE_NUM=CUR_INTERFACE+1
@@ -31,9 +30,11 @@ for FILE in vpns/*.ovpn; do
   ip route add default via $IP_START.1 dev tun$CUR_INTERFACE table VPN$PORT
   ip rule add fwmark $PORT table VPN$PORT
   iptables -A OUTPUT -t mangle -s $IP -j MARK --set-mark $PORT
-  GATEWAY_PARAMS="$GATEWAY_PARAMS --server $PORT:$IP"
+  echo "proxy -p$PORT -a -e$IP" >> 3proxy.cfg
+
   set +o xtrace
 done
 
-echo "*** Gateway"
-exec node dist/index.js $GATEWAY_PARAMS
+sleep 1
+echo "****** Starting 3proxy"
+exec 3proxy 3proxy.cfg
